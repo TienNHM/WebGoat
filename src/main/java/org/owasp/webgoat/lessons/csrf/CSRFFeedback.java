@@ -11,6 +11,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpSession;
 import java.io.IOException;
 import java.util.Map;
 import java.util.UUID;
@@ -25,6 +26,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.GetMapping;
 
 @RestController
 @AssignmentHints({"csrf-feedback-hint1", "csrf-feedback-hint2", "csrf-feedback-hint3"})
@@ -38,26 +40,41 @@ public class CSRFFeedback implements AssignmentEndpoint {
     this.objectMapper = objectMapper;
   }
 
+  private static final String CSRF_TOKEN_SESSION_KEY = "csrf-token";
+
+  // API để lấy CSRF token (frontend sẽ gọi và gắn vào các request POST sau này)
+  @GetMapping(path = "/csrf/token", produces = "application/json")
+  public Map<String, String> getCsrfToken(HttpSession session) {
+    String token = UUID.randomUUID().toString();
+    session.setAttribute(CSRF_TOKEN_SESSION_KEY, token);
+    return Map.of("csrfToken", token);
+  }
+
   @PostMapping(
       value = "/csrf/feedback/message",
       produces = {"application/json"})
   @ResponseBody
-  public AttackResult completed(HttpServletRequest request, @RequestBody String feedback) {
-    try {
-      objectMapper.enable(DeserializationFeature.FAIL_ON_IGNORED_PROPERTIES);
-      objectMapper.enable(DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES);
-      objectMapper.enable(DeserializationFeature.FAIL_ON_NUMBERS_FOR_ENUMS);
-      objectMapper.enable(DeserializationFeature.FAIL_ON_READING_DUP_TREE_KEY);
-      objectMapper.enable(DeserializationFeature.FAIL_ON_MISSING_CREATOR_PROPERTIES);
-      objectMapper.enable(DeserializationFeature.FAIL_ON_TRAILING_TOKENS);
-      objectMapper.readValue(feedback.getBytes(), Map.class);
-    } catch (IOException e) {
-      return failed(this).feedback(ExceptionUtils.getStackTrace(e)).build();
+  public AttackResult completed(HttpServletRequest request, @RequestBody Map<String, Object> requestBody) {
+    // Kiểm tra xem có CSRF token trong request body không
+    String csrfToken = (String) requestBody.get("csrfToken");
+    if (csrfToken == null) {
+      return failed(this).build();
     }
+
+    // Kiểm tra token hợp lệ
+    String sessionToken = (String) request.getSession()
+                                          .getAttribute(CSRF_TOKEN_SESSION_KEY);
+    boolean validToken = sessionToken != null && sessionToken.equals(csrfToken);
+    if (!validToken) {
+      return failed(this).build();
+    }
+
+    // Kiểm tra các yếu tố bảo mật khác
     boolean correctCSRF =
         requestContainsWebGoatCookie(request.getCookies())
-            && request.getContentType().contains(MediaType.TEXT_PLAIN_VALUE);
-    correctCSRF &= hostOrRefererDifferentHost(request);
+          && request.getContentType() != null 
+          && request.getContentType().contains(MediaType.APPLICATION_JSON_VALUE);
+    correctCSRF &= !hostOrRefererDifferentHost(request);
     if (correctCSRF) {
       String flag = UUID.randomUUID().toString();
       userSessionData.setValue("csrf-feedback", flag);
@@ -77,11 +94,11 @@ public class CSRFFeedback implements AssignmentEndpoint {
   }
 
   private boolean hostOrRefererDifferentHost(HttpServletRequest request) {
-    String referer = request.getHeader("Referer");
-    String host = request.getHeader("Host");
-    if (referer != null) {
-      return !referer.contains(host);
-    } else {
+      String referer = request.getHeader("Referer");
+      String host = request.getHeader("Host");
+      if (referer != null && host != null) {
+          return !referer.contains(host);
+      } else {
       return true;
     }
   }
