@@ -28,6 +28,7 @@
                 <p th:text="#{logged_out}">You've been logged out successfully.</p>
             </div>
             <br/><br/>
+            <h1>VI QUỐC THUẬN - 22110006 FIXED!</h1>
             <form th:action="@{/login}" method='POST' style="width: 200px;">
                 <div class="form-group">
                     <label for="exampleInputEmail1" th:text="#{username}">Username</label>
@@ -53,6 +54,26 @@
     </section>
 </section>
 
+
+<script>
+    function getCookie(name) {
+      const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+      return match ? match[2] : null;
+    }
+  
+    window.addEventListener("DOMContentLoaded", function () {
+      const token = getCookie('XSRF-TOKEN');
+      if (token) {
+        const input = document.createElement("input");
+        input.type = "hidden";
+        input.name = "_csrf"; // Spring expects this name
+        input.value = token;
+        const form = document.querySelector("form");
+        form.appendChild(input);
+      }
+    });
+</script>
+  
 
 </body>
 </html>
